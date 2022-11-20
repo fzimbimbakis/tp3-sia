@@ -1,0 +1,8 @@
+{
+    "original_dim": 784,
+    "intermediate_dim": 256,
+    "latent_dim": 2,
+    "batch_size": 100,
+    "epochs": 50,
+    "epsilon_std": 1.0
+}
