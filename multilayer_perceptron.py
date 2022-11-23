@@ -1,6 +1,7 @@
 import numpy as np
 from layer import Layer
 from fonts import add_noise
+from activations import Activation
 
 FIRST = 0
 MIDDLE = 1
@@ -126,8 +127,6 @@ class MultilayerPerceptron:
             aux_sum += (expected_output[i] - neurons[i].activation) ** 2
         return aux_sum
 
-    def tanh_dx(excitation):
-        return 1 - np.tanh(excitation) ** 2
 
     def backpropagation(self, expected_output):
         m = len(self.layers)
@@ -135,14 +134,14 @@ class MultilayerPerceptron:
             neurons = self.layers[i].neurons
             for j in range(len(neurons)):
                 if i == m - 1:
-                    neurons[j].sigma = (1 - np.tanh(neurons[j].excitation) ** 2) * \
+                    neurons[j].sigma = Activation.sigmoid_dx(neurons[j].excitation) * \
                                        (expected_output[j] - neurons[j].activation)
                 else:
                     upper_layer_neurons = self.layers[i + 1].neurons
                     aux_sum = 0
                     for neuron in upper_layer_neurons:
                         aux_sum += neuron.weights[j] * neuron.sigma
-                    neurons[j].sigma = (1 - np.tanh(neurons[j].excitation) ** 2) * aux_sum
+                    neurons[j].sigma = Activation.sigmoid_dx(neurons[j].excitation) * aux_sum
 
     def update_weights(self, batch_size):
         m = len(self.layers)

@@ -1,5 +1,5 @@
 import numpy as np
-
+from activations import Activation
 BIAS = 1
 FIRST = 0
 MIDDLE = 1
@@ -21,7 +21,7 @@ class Neuron:
         return self.excitation
 
     def activate(self, prev_layer_activations):
-        self.activation = np.tanh(self.excite(prev_layer_activations))
+        self.activation = Activation.sigmoid(self.excite(prev_layer_activations))
         return self.activation
 
     def update_weights(self, learning_rate, prev_layer_activations, momentum, batch_size):
