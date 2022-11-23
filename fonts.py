@@ -1,7 +1,11 @@
 ## Aca tienen 1 juego de fonts para entrenar el autoencoder.
 ## Son 32 patrones de 7x5 cada uno.
 import numpy as np
+import random
 
+font_header = np.array(["`", "a", "b", "c", "d", "e", "f", "g", "h", "i",
+                          "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+                          "u", "v", "w", "x", "y", "z", "{", "|", "}", "~", "DEL"])
 
 font = np.array([
    [0x04, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00],   # 0x60, `
@@ -50,3 +54,25 @@ def to_bin_array(encoded_caracter):
 
 def get_fonts():
    return np.array([np.array(to_bin_array(c)).flatten() for c in font])
+
+
+def add_noise(images: np.ndarray, noise_factor: float) -> np.ndarray:
+    noisy_set = np.empty((np.size(images, 0), np.size(images, 1)))
+    for i in range(images.shape[0]):
+        noisy_set[i] = np.zeros(np.size(images, 1))
+        for j in range(images.shape[1]):
+            noisy_set[i][j] = images[i][j]
+            if random.uniform(0, 1) < noise_factor:
+                noisy_set[i][j] = 0 if images[i][j] == 1 else 1
+    return noisy_set
+
+
+def print_letter(array):
+    for i in range(7):
+        for j in range(5):
+            if array[j + i * 5] > 0.5:
+                print("*", end="")
+            else:
+                print(" ", end="")
+        print("")
+    print("")

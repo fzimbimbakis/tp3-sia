@@ -1,130 +1,181 @@
 import numpy as np
-from random import random
-import matplotlib.pyplot as plt
-from fonts import get_fonts
+from layer import Layer
+from fonts import add_noise
 
+FIRST = 0
+MIDDLE = 1
+LAST = 2
 
 class MultilayerPerceptron:
+    adaptive_rate = False
+    error_limit = 0.001
+    prev_layer_neurons = 0
 
-    def __init__(self, num_inputs=1, hidden_layers=[5], num_outputs=1):
-
-        self.num_inputs = num_inputs
-        self.hidden_layers = hidden_layers
-        self.num_outputs = num_outputs
-
-        layers = [num_inputs] + hidden_layers + [num_outputs]
-
-        weights = []
-        for i in range(len(layers) - 1):
-            w = np.zeros((layers[i], layers[i + 1]))# podría ser random sino
-            weights.append(w)
-        self.weights = weights
-
-        derivatives = []
-        for i in range(len(layers) - 1):
-            d = np.zeros((layers[i], layers[i + 1]))
-            derivatives.append(d)
-        self.derivatives = derivatives
-
-        activations = []
-        for i in range(len(layers)):
-            a = np.zeros(layers[i])
-            activations.append(a)
-        self.activations = activations
+    def __init__(self, training_set, expected_output, learning_rate, layers, learning_rate_params=None,
+                 batch_size=1, momentum=False):
+        # Training set example: [[1, 1], [-1, 1], [1, -1]]
+        self.training_set = training_set
+        # Expected output example: [[0, 0], [0, 1], [1, 0]]
+        self.expected_output = expected_output
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.layers = []
+        self.error_min = None
+        self.momentum = momentum
+        if learning_rate_params:
+            self.adaptive_rate = True
+            self.learning_rate_inc = learning_rate_params[0]
+            self.learning_rate_dec = learning_rate_params[1]
+            self.learning_rate_k = learning_rate_params[2]
+        self.add(layers[0], FIRST)
+        for i in range(layers.size-2):
+            self.add(layers[i+1], MIDDLE)
+        self.add(layers[-1], LAST)
 
 
-    def forward_propagate(self, inputs):
-        activations = inputs
 
-        self.activations[0] = activations
-
-        for i, w in enumerate(self.weights):
-            net_inputs = np.dot(activations, w)
-
-            activations = self._sigmoid(net_inputs)
-
-            self.activations[i + 1] = activations
-
-        return activations
-
-
-    def back_propagate(self, error):
-
-        for i in reversed(range(len(self.derivatives))):
-
-            activations = self.activations[i+1]
-
-            delta = error * self._sigmoid_derivative(activations)
-
-            delta_re = delta.reshape(delta.shape[0], -1).T
-
-            current_activations = self.activations[i]
-
-            current_activations = current_activations.reshape(current_activations.shape[0],-1)
-
-            self.derivatives[i] = np.dot(current_activations, delta_re)
-
-            error = np.dot(delta, self.weights[i].T)
-
-
-    def train(self, inputs, targets, epochs, learning_rate):
+    def train(self, epochs, noise_factor=None):
+        error = 1
+        prev_error = None
+        self.error_min = float('inf')
+        k = 0
+        aux_batch = self.batch_size
         errors = []
-        for i in range(epochs):
-            sum_errors = 0
 
-            for j, input in enumerate(inputs):
-                target = targets[j]
+        for epoch in range(epochs):
+            if epoch % 100 == 0:
+                print("epoch: " + str(epoch))
+                print("error: " + str(error))
+            if noise_factor:
+                aux_training_set = add_noise(self.training_set, noise_factor)
+            else:
+                aux_training_set = self.training_set
+            aux_expected_output = self.expected_output
+            while len(aux_training_set) > 0:
+                i_x = np.random.randint(0, len(aux_training_set))
+                training_set = aux_training_set[i_x]
+                expected_output = aux_expected_output[i_x]
 
-                output = self.forward_propagate(input)
+                aux_training_set = np.delete(aux_training_set, i_x, axis=0)
+                aux_expected_output = np.delete(aux_expected_output, i_x, axis=0)
 
-                error = target - output
+                self.propagate(training_set)
+                self.backpropagation(expected_output)
 
-                self.back_propagate(error)
+                aux_batch -= 1
+                self.update_weights(aux_batch)
+                if aux_batch == 0:
+                    aux_batch = self.batch_size
 
-                self.gradient_descent(learning_rate)
+                aux_error = self.calculate_error(expected_output)
+                error += aux_error
 
-                sum_errors += self._mse(target, output)
+                if self.adaptive_rate and prev_error:
+                    k = self.adapt_learning_rate(error - prev_error, k)
+                prev_error = aux_error
 
+            error *= 0.5
+            errors.append(error)
 
-            print("Error: {} at epoch {}".format(sum_errors / len(inputs), i+1))
+            if error < self.error_min:
+                self.error_min = error
 
-            errors.append(sum_errors / len(inputs))
+            if error < self.error_limit:
+                return
 
-        #plt.plot(list(range(0,epochs)),errors)
-        #plt.xlabel("Epochs")
-        #plt.ylabel("Error")
-        #plt.show()
+    def propagate(self, training_set):
+        m = len(self.layers)
+        self.layers[0].set_activations(training_set)
+        for i in range(1, m):
+            prev_layer = self.layers[i-1]
+            self.layers[i].propagate(prev_layer)
 
-        print("Training complete!")
-        print("=====")
-        print(errors[-1])
+    def encode_input(self, training_value):
+        m = int(len(self.layers) / 2)
+        self.layers[0].set_activations(training_value)
+        for i in range(1, m+1):
+            prev_layer = self.layers[i - 1]
+            self.layers[i].propagate(prev_layer)
+        return np.copy(self.layers[m].get_neurons_activation())
 
+    def encode(self, training_set):
+        answer = []
+        for i in training_set:
+            answer.append(self.encode_input(i))
+        return answer
 
-    def gradient_descent(self, learningRate=1):
+    def decode(self, training_value):
+        m = int(len(self.layers) / 2)
+        self.layers[m].set_activations(training_value)
+        for i in range(m + 1, len(self.layers)):
+            prev_layer = self.layers[i - 1]
+            self.layers[i].propagate(prev_layer)
+        return np.copy(self.layers[len(self.layers)-1].get_neurons_activation())
 
-        for i in range(len(self.weights)):
-            weights = self.weights[i]
-            derivatives = self.derivatives[i]
-            weights += derivatives * learningRate
+    def decode_input(self, training_set):
+        answer = []
+        for i in training_set:
+            answer.append(self.decode_input(i))
+        return answer
 
+    def calculate_error(self, expected_output):
+        m = len(self.layers)
+        neurons = self.layers[m - 1].neurons
+        aux_sum = 0
+        for i in range(len(neurons)):
+            aux_sum += (expected_output[i] - neurons[i].activation) ** 2
+        return aux_sum
 
-    def _sigmoid(self, x):
-        y = 1.0 / (1 + np.exp(-x))
-        return y
+    def tanh_dx(excitation):
+        return 1 - np.tanh(excitation) ** 2
 
+    def backpropagation(self, expected_output):
+        m = len(self.layers)
+        for i in range(m - 1, 0, -1):
+            neurons = self.layers[i].neurons
+            for j in range(len(neurons)):
+                if i == m - 1:
+                    neurons[j].sigma = (1 - np.tanh(neurons[j].excitation) ** 2) * \
+                                       (expected_output[j] - neurons[j].activation)
+                else:
+                    upper_layer_neurons = self.layers[i + 1].neurons
+                    aux_sum = 0
+                    for neuron in upper_layer_neurons:
+                        aux_sum += neuron.weights[j] * neuron.sigma
+                    neurons[j].sigma = (1 - np.tanh(neurons[j].excitation) ** 2) * aux_sum
 
-    def _sigmoid_derivative(self, x):
-        return x * (1.0 - x)
+    def update_weights(self, batch_size):
+        m = len(self.layers)
+        for i in range(1, m):
+            neurons = self.layers[i].neurons
+            prev_neurons_activations = self.layers[i - 1].get_neurons_activation()
+            for neuron in neurons:
+                neuron.update_weights(self.learning_rate, prev_neurons_activations, self.momentum, batch_size)
 
+    def add(self, neurons, layer):
+        self.layers.append(Layer(neurons, self.prev_layer_neurons, layer))
+        self.prev_layer_neurons = neurons
 
-    def _mse(self, target, output):
-        return np.average((target - output) ** 2)
+    def adapt_learning_rate(self, delta_error, k):
+        if delta_error < 0:
+            if k > 0:
+                k = 0
+            k -= 1
+            if k == -self.learning_rate_k:
+                self.learning_rate += self.learning_rate_inc
+        elif delta_error > 0:
+            if k < 0:
+                k = 0
+            k += 1
+            if k == self.learning_rate_k:
+                self.learning_rate -= self.learning_rate_dec * self.learning_rate
+        else:
+            k = 0
+        return k
 
-
-if __name__ == "__main__":
-
-    fonts = get_fonts()
-
-    mlp = MultilayerPerceptron(35, [5, 2, 5], 35)
-
-    mlp.train(fonts, fonts, 50000, 0.01)
+    def test_input(self, test_set):
+        output = []
+        for i in range(len(test_set)):
+            self.propagate(test_set[i])
+            output.append([neuron.activation for neuron in self.layers[len(self.layers) - 1].neurons])
+        return output
