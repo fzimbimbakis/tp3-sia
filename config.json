@@ -1,8 +1,35 @@
+
 {
-    "original_dim": 784,
-    "intermediate_dim": 256,
-    "latent_dim": 2,
-    "batch_size": 100,
-    "epochs": 50,
-    "epsilon_std": 1.0
+    "Exercise1":{
+      "adaptative": {
+        "run": true,
+        "learning_rate": 0.0005,
+        "epochs": 20000
+      },
+      "basic": {
+        "run": true,
+        "learning_rate": 0.0005,
+        "epochs": 20000
+      },
+      "batch": {
+        "run": true,
+        "learning_rate": 0.0005,
+        "epochs": 20000
+      },
+      "momentum": {
+        "run": true,
+        "learning_rate": 0.0005,
+        "epochs": 20000
+      }
+
+
+    },
+    "Exercise2":{
+        "original_dim": 784,
+        "intermediate_dim": 256,
+        "latent_dim": 2,
+        "batch_size": 100,
+        "epochs": 50,
+        "epsilon_std": 1.0
+      }
 }
