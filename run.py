@@ -5,7 +5,7 @@ from Executables.batch import batch_func
 from Executables.momentun import momentum_func
 
 if __name__ == '__main__':
-    with open("../config.json", "r") as jsonfile:
+    with open("config.json", "r") as jsonfile:
         jsonData = json.load(jsonfile)  # Reading the file
         print("Read successful")
         jsonfile.close()
