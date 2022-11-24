@@ -105,7 +105,7 @@ class MultilayerPerceptron:
             answer.append(self.encode_input(i))
         return answer
 
-    def decode(self, training_value):
+    def decode_input(self, training_value):
         m = int(len(self.layers) / 2)
         self.layers[m].set_activations(training_value)
         for i in range(m + 1, len(self.layers)):
@@ -113,7 +113,7 @@ class MultilayerPerceptron:
             self.layers[i].propagate(prev_layer)
         return np.copy(self.layers[len(self.layers)-1].get_neurons_activation())
 
-    def decode_input(self, training_set):
+    def decode(self, training_set):
         answer = []
         for i in training_set:
             answer.append(self.decode_input(i))
