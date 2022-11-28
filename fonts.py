@@ -2,6 +2,7 @@
 ## Son 32 patrones de 7x5 cada uno.
 import numpy as np
 import random
+import matplotlib.pyplot as plt
 
 font_header = np.array(["`", "a", "b", "c", "d", "e", "f", "g", "h", "i",
                         "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
@@ -77,3 +78,27 @@ def print_letter(array):
                 print(" ", end="")
         print("")
     print("")
+
+def labeled_scatter(xValues, yValues, labels=None):
+    plt.figure(figsize=(16, 10))
+    xs = xValues
+    ys = yValues
+
+    plt.scatter(xs, ys)
+
+    for i in range(len(labels)):
+        plt.text(xs[i], ys[i], s=labels[i],
+                 fontdict=dict(color='red', size=10))
+
+    plt.xlabel("X")
+    plt.xlabel("Y")
+    plt.grid()
+    plt.show()
+
+def to_bits(values: np.ndarray) -> np.ndarray:
+    new_values = np.empty((np.size(values, 0), np.size(values, 1) * 5))
+
+    for i in range(np.size(values, 0)):
+        new_values[i] = np.array([[(1 if (v >> i & 1) == 1 else -1) for i in range(4, -1, -1)] for v in values[i]]).flatten()
+
+    return new_values

@@ -1,180 +1,214 @@
+import matplotlib.pyplot as plt
 import numpy as np
-from layer import Layer
 from fonts import add_noise
-from activations import Activation
 
-FIRST = 0
-MIDDLE = 1
-LAST = 2
+
+def sigmoid(x):
+    return np.tanh(0.7*x)
+
+
+def sigmoid_derivative(x):
+    return (1 - np.power(x, 2))*0.7
+
 
 class MultilayerPerceptron:
-    adaptive_rate = False
-    error_limit = 0.001
-    prev_layer_neurons = 0
 
-    def __init__(self, training_set, expected_output, learning_rate, layers, learning_rate_params=None,
-                 batch_size=1, momentum=False):
-        # Training set example: [[1, 1], [-1, 1], [1, -1]]
-        self.training_set = training_set
-        # Expected output example: [[0, 0], [0, 1], [1, 0]]
-        self.expected_output = expected_output
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
-        self.layers = []
-        self.error_min = None
-        self.momentum = momentum
-        if learning_rate_params:
-            self.adaptive_rate = True
-            self.learning_rate_inc = learning_rate_params[0]
-            self.learning_rate_dec = learning_rate_params[1]
-            self.learning_rate_k = learning_rate_params[2]
-        self.add(layers[0], FIRST)
-        for i in range(layers.size-2):
-            self.add(layers[i+1], MIDDLE)
-        self.add(layers[-1], LAST)
+    def __init__(self, n_of_inputs, hidden_layers, n_of_outputs, max_error):
+        self.max_error = max_error
+        self.n_of_inputs = n_of_inputs
+        self.hidden_layers = hidden_layers
+        self.n_of_outputs = n_of_outputs
+
+        # Array con la cantidad de neuronas de cada capa
+        neurons_of_layer = [n_of_inputs] + hidden_layers + [n_of_outputs]
+
+        weights = []
+        biases = []
+        last_deltas = []
+        last_derivates = []
+        derivatives = []
+        deltas = []
+        for i in range(len(neurons_of_layer) - 1):
+            w = np.random.normal(loc=0.0, scale=np.sqrt(2 / (neurons_of_layer[i] + neurons_of_layer[i + 1])),
+                                 size=(neurons_of_layer[i], neurons_of_layer[i + 1]))
+            b = np.random.rand(neurons_of_layer[i + 1], 1)
+            d = np.zeros((neurons_of_layer[i], neurons_of_layer[i + 1]))
+            deltas_i = np.zeros((neurons_of_layer[i + 1], 1))
+            deltas.append(deltas_i)
+            last_deltas.append(deltas_i)
+            last_derivates.append(d)
+            derivatives.append(d)
+            weights.append(w)
+            biases.append(b)
+        self.weights = weights
+        self.biases = biases
+        self.derivatives = derivatives
+        self.deltas = deltas
+        self.last_deltas = deltas
+        self.last_derivatives = last_derivates
+        activations = []
+        for i in range(len(neurons_of_layer)):
+            a = np.zeros(neurons_of_layer[i])
+            activations.append(a)
+        self.activations = activations
 
 
+    def propagate(self, input_):
+        return self.predict_from_layer(input_, 0)
 
-    def train(self, epochs, noise_factor=None):
-        error = 1
-        prev_error = None
-        self.error_min = float('inf')
-        k = 0
-        aux_batch = self.batch_size
-        errors = []
+    def predict_from_layer(self, input_, layer):
+        self.activations[0] = input_
 
-        for epoch in range(epochs):
-            if epoch % 100 == 0:
-                print("epoch: " + str(epoch))
-                print("error: " + str(error))
-            if noise_factor:
-                aux_training_set = add_noise(self.training_set, noise_factor)
+        for i, w in enumerate(self.weights):
+
+            if i >= layer:
+                x = np.dot(input_, w) + self.biases[i].T
+                x = x.reshape(x.shape[1])
+                input_ = sigmoid(x)
+                self.activations[i + 1] = input_
+
+        return self.activations[-1], self.weights
+
+    def train(self, inputs, outputs, epochs, eta, K, a, Q, b, adaptive_lr=False):
+        loss = []
+        x = []
+        etas = []
+        min_weights = []
+        min_loss = 100000
+        dec_loss = 0
+        gr_loss = 0
+        loss_value = 0
+
+        for i in range(epochs):
+            total_error = 0
+            for j, input_ in enumerate(inputs):
+                predicted_output, weights = self.propagate(input_)
+
+                error = outputs[j] - predicted_output
+
+                self.backpropagation(error)
+
+                self.update_weights(eta)
+
+                total_error += self.mean_square_error(outputs[j], predicted_output)
+            last_loss = loss_value
+            loss_value = total_error / len(inputs)
+            if loss_value < min_loss:
+                min_loss = loss_value
+                min_weights = weights
+            if (i+1) % (epochs/10) == 0:
+                print("Loss: {} at epoch {}".format(loss_value, i + 1))
+            if loss_value <= self.max_error:
+                break
+            if (loss_value - last_loss) <= 0:
+                gr_loss += 1
+                dec_loss = 0
             else:
-                aux_training_set = self.training_set
-            aux_expected_output = self.expected_output
-            while len(aux_training_set) > 0:
-                i_x = np.random.randint(0, len(aux_training_set))
-                training_set = aux_training_set[i_x]
-                expected_output = aux_expected_output[i_x]
+                dec_loss += 1
+                gr_loss = 0
+            if gr_loss >= K:
+                eta += a * eta
+                gr_loss = 0
+            elif dec_loss >= Q:
+                eta -= b * eta
+                dec_loss = 0
+            if adaptive_lr:
+                etas.append(eta)
+                eta = self.exp_decay(i, etas[0])
+            loss.append(loss_value)
+            x.append(i)
+        print("Minimum loss: ", min_loss)
+        self.weights = min_weights
+        plt.plot(x, loss)
+        plt.ylabel("Loss")
+        plt.xlabel("Epoch")
+        plt.show()
 
-                aux_training_set = np.delete(aux_training_set, i_x, axis=0)
-                aux_expected_output = np.delete(aux_expected_output, i_x, axis=0)
+    def train_with_noise(self, inputs, outputs, epochs, eta, noise, K, a, Q, b, adaptive_lr=False):
+        loss = []
+        x = []
+        etas = []
+        min_weights = []
+        min_loss = 100000
+        dec_loss = 0
+        gr_loss = 0
+        loss_value = 0
 
-                self.propagate(training_set)
-                self.backpropagation(expected_output)
+        for i in range(epochs):
+            if not i % 100:
+                inputs = add_noise(inputs, noise)
+            total_error = 0
+            for j, input_ in enumerate(inputs):
+                predicted_output, weights = self.propagate(input_)
 
-                aux_batch -= 1
-                self.update_weights(aux_batch)
-                if aux_batch == 0:
-                    aux_batch = self.batch_size
+                error = outputs[j] - predicted_output
 
-                aux_error = self.calculate_error(expected_output)
-                error += aux_error
+                self.backpropagation(error)
 
-                if self.adaptive_rate and prev_error:
-                    k = self.adapt_learning_rate(error - prev_error, k)
-                prev_error = aux_error
+                self.update_weights(eta)
 
-            error *= 0.5
-            errors.append(error)
+                total_error += self.mean_square_error(outputs[j], predicted_output)
+            last_loss = loss_value
+            loss_value = total_error / len(inputs)
+            if loss_value < min_loss:
+                min_loss = loss_value
+                min_weights = weights
+            if (i+1) % (epochs/10) == 0:
+                print("Loss: {} at epoch {}".format(loss_value, i + 1))
+            if loss_value <= self.max_error:
+                break
+            if (loss_value - last_loss) <= 0:
+                gr_loss += 1
+                dec_loss = 0
+            else:
+                dec_loss += 1
+                gr_loss = 0
+            if gr_loss >= K:
+                eta += a * eta
+                gr_loss = 0
+            elif dec_loss >= Q:
+                eta -= b * eta
+                dec_loss = 0
+            if adaptive_lr:
+                etas.append(eta)
+                eta = self.exp_decay(i, etas[0])
+            loss.append(loss_value)
+            x.append(i)
+        print("Minimum loss: ", min_loss)
+        self.weights = min_weights
+        plt.plot(x, loss)
+        plt.ylabel("Loss")
+        plt.xlabel("Epoch")
+        plt.show()
 
-            if error < self.error_min:
-                self.error_min = error
+    def backpropagation(self, error):
+        for i in reversed(range(len(self.derivatives))):
+            output = self.activations[i + 1]
 
-            if error < self.error_limit:
-                return
+            delta = sigmoid_derivative(output) * error
+            self.last_deltas[i] = self.deltas[i]
+            self.deltas[i] = delta.reshape(delta.shape[0], -1).T
 
-    def propagate(self, training_set):
-        m = len(self.layers)
-        self.layers[0].set_activations(training_set)
-        for i in range(1, m):
-            prev_layer = self.layers[i-1]
-            self.layers[i].propagate(prev_layer)
+            inputs = self.activations[i]
+            inputs = inputs.reshape(inputs.shape[0], -1)
+            self.last_derivatives[i] = self.derivatives[i]
+            self.derivatives[i] = np.dot(inputs, self.deltas[i])
 
-    def encode_input(self, training_value):
-        m = int(len(self.layers) / 2)
-        self.layers[0].set_activations(training_value)
-        for i in range(1, m+1):
-            prev_layer = self.layers[i - 1]
-            self.layers[i].propagate(prev_layer)
-        return np.copy(self.layers[m].get_neurons_activation())
+            error = np.dot(self.deltas[i], self.weights[i].T)
+            error = error.reshape(error.shape[1])
 
-    def encode(self, training_set):
-        answer = []
-        for i in training_set:
-            answer.append(self.encode_input(i))
-        return answer
+    def update_weights(self, eta):
 
-    def decode_input(self, training_value):
-        m = int(len(self.layers) / 2)
-        self.layers[m].set_activations(training_value)
-        for i in range(m + 1, len(self.layers)):
-            prev_layer = self.layers[i - 1]
-            self.layers[i].propagate(prev_layer)
-        return np.copy(self.layers[len(self.layers)-1].get_neurons_activation())
+        for i in range(len(self.weights)):
+            self.weights[i] += eta * self.derivatives[i] + (eta * 0.9) * self.last_derivatives[i]
+            self.biases[i] += eta * self.deltas[i].reshape(self.biases[i].shape) + (eta * 0.9) * self.last_deltas[i].reshape(self.biases[i].shape)
 
-    def decode(self, training_set):
-        answer = []
-        for i in training_set:
-            answer.append(self.decode_input(i))
-        return answer
+    def mean_square_error(self, expected, predicted_output):
+        return np.average((expected - predicted_output) ** 2)
 
-    def calculate_error(self, expected_output):
-        m = len(self.layers)
-        neurons = self.layers[m - 1].neurons
-        aux_sum = 0
-        for i in range(len(neurons)):
-            aux_sum += (expected_output[i] - neurons[i].activation) ** 2
-        return aux_sum
+    def exp_decay(self, epoch, eta):
+        k = 0.000001
+        x = np.exp(-k * epoch)
+        return eta * x
 
 
-    def backpropagation(self, expected_output):
-        m = len(self.layers)
-        for i in range(m - 1, 0, -1):
-            neurons = self.layers[i].neurons
-            for j in range(len(neurons)):
-                if i == m - 1:
-                    neurons[j].sigma = Activation.sigmoid_dx(neurons[j].excitation) * \
-                                       (expected_output[j] - neurons[j].activation)
-                else:
-                    upper_layer_neurons = self.layers[i + 1].neurons
-                    aux_sum = 0
-                    for neuron in upper_layer_neurons:
-                        aux_sum += neuron.weights[j] * neuron.sigma
-                    neurons[j].sigma = Activation.sigmoid_dx(neurons[j].excitation) * aux_sum
-
-    def update_weights(self, batch_size):
-        m = len(self.layers)
-        for i in range(1, m):
-            neurons = self.layers[i].neurons
-            prev_neurons_activations = self.layers[i - 1].get_neurons_activation()
-            for neuron in neurons:
-                neuron.update_weights(self.learning_rate, prev_neurons_activations, self.momentum, batch_size)
-
-    def add(self, neurons, layer):
-        self.layers.append(Layer(neurons, self.prev_layer_neurons, layer))
-        self.prev_layer_neurons = neurons
-
-    def adapt_learning_rate(self, delta_error, k):
-        if delta_error < 0:
-            if k > 0:
-                k = 0
-            k -= 1
-            if k == -self.learning_rate_k:
-                self.learning_rate += self.learning_rate_inc
-        elif delta_error > 0:
-            if k < 0:
-                k = 0
-            k += 1
-            if k == self.learning_rate_k:
-                self.learning_rate -= self.learning_rate_dec * self.learning_rate
-        else:
-            k = 0
-        return k
-
-    def test_input(self, test_set):
-        output = []
-        for i in range(len(test_set)):
-            self.propagate(test_set[i])
-            output.append([neuron.activation for neuron in self.layers[len(self.layers) - 1].neurons])
-        return output
