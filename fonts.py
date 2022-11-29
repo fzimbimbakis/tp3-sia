@@ -58,15 +58,13 @@ def get_fonts():
     return np.array([np.array(to_bin_array(c)).flatten() for c in font])
 
 
-def add_noise(images: np.ndarray, noise_factor: float) -> np.ndarray:
-    noisy_set = np.empty((np.size(images, 0), np.size(images, 1)))
-    for i in range(images.shape[0]):
-        noisy_set[i] = np.zeros(np.size(images, 1))
-        for j in range(images.shape[1]):
-            noisy_set[i][j] = images[i][j]
-            if random.uniform(0, 1) < noise_factor:
-                noisy_set[i][j] = 0 if images[i][j] == 1 else 1
-    return noisy_set
+def add_noise(images: np.ndarray, noise: float):
+    images_with_noise = []
+    for image in images:
+        images_with_noise.append(np.array([image[i] - np.random.uniform(0.1, 0.2)*image[i]
+                                           if np.random.random() < noise else image[i] for i in range(np.size(image))]))
+
+    return np.array(images_with_noise)
 
 
 def print_letter(array):
